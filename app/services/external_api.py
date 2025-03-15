@@ -1,63 +1,55 @@
-import requests
-from typing import Optional, List, Dict, Any
 import json
+from typing import Optional, List, Dict, Any
 from fastapi import HTTPException
 
-from config import settings
 
-async def get_empleados_data(fecha_inicio: Optional[str] = None, fecha_fin: Optional[str] = None) -> List[Dict[str, Any]]:
+async def process_empleados_data(data: List[Dict[str, Any]], fecha_inicio: Optional[str] = None, fecha_fin: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Obtiene datos de empleados desde la API externa.
+    Procesa los datos de empleados recibidos directamente en el endpoint.
     
     Args:
-        fecha_inicio: Fecha inicial en formato YYYY-MM-DD
-        fecha_fin: Fecha final en formato YYYY-MM-DD
+        data: Datos de empleados recibidos en el body del request
+        fecha_inicio: Fecha inicial en formato YYYY-MM-DD (para referencia)
+        fecha_fin: Fecha final en formato YYYY-MM-DD (para referencia)
         
     Returns:
-        Lista de diccionarios con datos de empleados
+        Lista de diccionarios con datos de empleados procesados
     """
-    payload = {}
-    if fecha_inicio:
-        payload["fecha_inicio"] = fecha_inicio
-    if fecha_fin:
-        payload["fecha_fin"] = fecha_fin
-        
     try:
-
-        api_url = settings.EXTERNAL_API_URL
-        if payload:
-            response = requests.post(api_url, json=payload)
-        else:
-            response = requests.post(api_url)
-        
-        if response.status_code != 200:
+        # Validar que se recibieron datos
+        if not data:
             raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error al obtener datos de la API externa. Código: {response.status_code}"
+                status_code=400, 
+                detail="No se proporcionaron datos de empleados"
             )
         
-        empleados_data = response.json()
+        # Asegurar que los datos están en formato lista
+        if not isinstance(data, list):
+            data = [data]
+            
+        print(f"Procesando datos de {len(data)} empleados")
         
-        if not isinstance(empleados_data, list):
-            empleados_data = [empleados_data]
+        # Añade logs detallados para depuración
+        if len(data) > 0:
+            print(f"Ejemplo del primer empleado: {json.dumps(data[0], default=str)[:500]}...")
         
-        return empleados_data
+        return data
         
-    except requests.RequestException as e:
-
-        print(f"Error al conectar con la API externa: {str(e)}")
+    except Exception as e:
+        # Registrar el error con detalles
+        print(f"Error al procesar los datos: {str(e)}")
         
-
         try:
             with open("test.json", "r", encoding="utf-8") as file:
-                empleados_data = json.load(file)
-                if not isinstance(empleados_data, list):
-                    empleados_data = [empleados_data]
+                fallback_data = json.load(file)
+                if not isinstance(fallback_data, list):
+                    fallback_data = [fallback_data]
                 
                 print("Usando datos de prueba del archivo local")
-                return empleados_data
-        except Exception :
+                return fallback_data
+        except Exception as fallback_error:
+            print(f"Error al cargar datos de respaldo: {str(fallback_error)}")
             raise HTTPException(
                 status_code=503, 
-                detail=f"Error de conexión con el servicio externo y no se pudo cargar datos de respaldo: {str(e)}"
+                detail=f"Error al procesar los datos: {str(e)}"
             )

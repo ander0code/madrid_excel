@@ -1,52 +1,96 @@
-from fastapi import APIRouter, Query
-from fastapi.responses import FileResponse, JSONResponse
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Response, Request
 
-from services.external_api import get_empleados_data
-from services.excel_service import generar_excel_marcaciones
-from config import settings
+import traceback
+
+from models.schemas import ReporteRequest
+from services.external_api import process_empleados_data
+from services.excel_service import generate_excel_report
 
 router = APIRouter()
 
-@router.get("/marcaciones-excel", response_class=FileResponse)
-async def obtener_marcaciones_excel(
-    fecha_inicio: Optional[str] = Query(None, description="Fecha inicial en formato YYYY-MM-DD"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha final en formato YYYY-MM-DD")
-):
+@router.get("/ping")
+async def ping():
+    """Endpoint simple para verificar si el servicio está disponible"""
+    return {"status": "ok", "message": "Excel service is running"}
+
+@router.post("/marcaciones-excel")
+async def generar_reporte_excel(request: ReporteRequest, req: Request):
     """
-    Genera un archivo Excel con marcaciones de personal.
-    Opcionalmente filtrado por rango de fechas.
+    Genera un reporte Excel a partir de los datos de empleados recibidos directamente.
     """
     try:
-        empleados_data = await get_empleados_data(fecha_inicio, fecha_fin)
+        # Log para debugging
+        content_length = req.headers.get("content-length", "desconocido")
+        print(f"Recibiendo solicitud con Content-Length: {content_length} bytes")
+        print(f"Recibidos {len(request.empleados_data)} empleados para procesar")
         
-        archivo_excel, exito = generar_excel_marcaciones(empleados_data)
+        # Mostrar muestra de los datos recibidos
+        if request.empleados_data:
+            muestra_empleado = request.empleados_data[0]
+            print(f"Muestra primer empleado: {muestra_empleado.emp_code} - {muestra_empleado.first_name} {muestra_empleado.last_name}")
+            print(f"Tiene {len(muestra_empleado.marcaciones)} marcaciones")
         
-        if not exito:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": "Error al generar el archivo Excel"}
+        # Procesar los datos recibidos
+        print("Procesando datos recibidos...")
+        try:
+            empleados_data = await process_empleados_data(
+                [empleado.dict() for empleado in request.empleados_data],
+                request.fecha_inicio,
+                request.fecha_fin
+            )
+            print(f"Datos procesados correctamente. {len(empleados_data)} empleados listos.")
+        except Exception as proc_error:
+            print(f"Error procesando datos: {str(proc_error)}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=422,
+                detail=f"Error al procesar los datos de empleados: {str(proc_error)}"
             )
         
-        nombre_archivo = settings.EXCEL_OUTPUT_FILE
-        if fecha_inicio or fecha_fin:
-            periodo = f"{fecha_inicio or 'inicio'}_a_{fecha_fin or 'fin'}"
-            nombre_archivo = f"marcaciones_{periodo}.xlsx"
+        # Generar el Excel
+        print("Generando Excel...")
+        try:
+            excel_bytes = await generate_excel_report(
+                empleados_data,
+                request.fecha_inicio, 
+                request.fecha_fin
+            )
+            print(f"Excel generado correctamente. Tamaño: {len(excel_bytes) / 1024:.2f} KB")
+        except Exception as excel_error:
+            print(f"Error generando Excel: {str(excel_error)}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al generar el Excel: {str(excel_error)}"
+            )
         
-        headers = {"X-Generation-Success": "true"}
+        # Nombre de archivo con fechas si están disponibles
+        filename = "marcaciones"
+        if request.fecha_inicio:
+            filename += f"_desde_{request.fecha_inicio}"
+        if request.fecha_fin:
+            filename += f"_hasta_{request.fecha_fin}"
+        filename += ".xlsx"
         
-        return FileResponse(
-            path=archivo_excel,
-            filename=nombre_archivo,
+        # Retornar el archivo Excel
+        response = Response(
+            content=excel_bytes,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers=headers
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
         )
         
+        print("Respondiendo con el Excel generado")
+        return response
+        
+    except HTTPException:
+        # Reenviar excepciones HTTP ya creadas
+        raise
     except Exception as e:
-        return JSONResponse(
+        print(f"Error no manejado: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
             status_code=500,
-            content={
-                "success": False,
-                "message": f"Error al generar el excel: {str(e)}"
-            }
+            detail=f"Error al generar el reporte Excel: {str(e)}"
         )
