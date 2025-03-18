@@ -1,0 +1,6 @@
+1. levantar el env
+2. pip install -r requirements.txt
+#tienes que estar dentro de la carpeta app
+3. cd app
+4- uvicorn main:app --reload
+listo :F
