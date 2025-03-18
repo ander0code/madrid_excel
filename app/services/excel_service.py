@@ -18,7 +18,7 @@ COLOR_AMARILLO = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type
 COLOR_VERDE = PatternFill(start_color="538D22", end_color="538D22", fill_type="solid")
 COLOR_ENCABEZADO = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
 
-MARGEN_TOLERANCIA = 5
+MARGEN_TOLERANCIA = 0
 
 async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inicio: Optional[str] = None, fecha_fin: Optional[str] = None) -> bytes:
     """
@@ -93,6 +93,8 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
 
         fechas_dias = []
         fecha_col_map = {}
+        # Diccionario para rastrear las columnas que son TAR o EXT
+        columnas_tardanza_extension = {}
         
         if usar_fechas_dinamicas:
             fecha_actual = fecha_inicio_dt
@@ -143,6 +145,8 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 if sub in ["TAR", "EXT"]:
                     celda.fill = COLOR_ROJO
                     celda.font = Font(color="FFFFFF", bold=True)
+                    # Registrar columnas TAR y EXT para aplicar negrita posteriormente
+                    columnas_tardanza_extension[col+j] = sub
             col += 4
 
         for row in ws.iter_rows(min_row=8, max_row=10, min_col=1, max_col=col-1):
@@ -257,6 +261,7 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                                 celda_tardanza = ws.cell(row=fila_actual, column=col_inicio+1, 
                                                        value=str(diferencia_ingreso))
 
+                                # Aplicar negrita a la celda TAR (tardanza)
                                 if abs(diferencia_ingreso) <= MARGEN_TOLERANCIA:
                                     celda_tardanza.fill = COLOR_VERDE
                                     celda_tardanza.font = Font(color="FFFFFF", bold=True)
@@ -282,6 +287,7 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                                 celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
                                                        value=str(diferencia_salida))
                                 
+                                # Aplicar negrita a la celda EXT (extensión)
                                 if abs(diferencia_salida) <= MARGEN_TOLERANCIA:
                                     celda_extension.fill = COLOR_VERDE
                                     celda_extension.font = Font(color="FFFFFF", bold=True)
@@ -304,13 +310,11 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
             
             fila_actual += 1
 
-        # Aplicar negrita a todas las celdas
-        for row in ws.iter_rows(min_row=1, max_row=fila_actual-1):
-            for cell in row:
-                if cell.value is not None:  # Solo aplicar a celdas con valor
-                    current_font = cell.font
-                    new_color = current_font.color if hasattr(current_font, 'color') and current_font.color else "000000"
-                    cell.font = Font(bold=True, color=new_color)
+        # Eliminar el código que aplicaba negrita a todas las celdas
+        # y solo aplicar estilos a los textos de encabezados importantes
+        
+        # Solo dejamos los encabezados y títulos en negrita, que ya tienen su estilo
+        # por defecto aplicado en el código anterior
 
         thin_border = Border(
             left=Side(style='thin', color='000000'),
