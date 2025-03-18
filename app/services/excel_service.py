@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.formatters import formatear_dias_teletrabajo, formato_tiempo
+from utils.formatters import formatear_dias_teletrabajo
 from config import settings
 
 async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inicio: Optional[str] = None, fecha_fin: Optional[str] = None) -> bytes:
@@ -252,31 +252,37 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                             if not isinstance(marcacion, dict) or "fecha" not in marcacion:
                                 continue
                                 
-                            fecha_marca = datetime.strptime(marcacion["fecha"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%d")
+                            # Convertir la fecha de la marcación al formato esperado
+                            fecha_marca = None
+                            try:
+                                fecha_marca = datetime.strptime(marcacion["fecha"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%d")
+                            except ValueError:
+                                # Intentar otro formato si el primero falla
+                                try:
+                                    fecha_marca = datetime.strptime(marcacion["fecha"], "%Y-%m-%d").strftime("%Y-%m-%d")
+                                except ValueError:
+                                    print(f"Error al parsear fecha: {marcacion['fecha']}")
+                                    continue
                             
                             if fecha_marca in fecha_col_map:
                                 col_inicio = fecha_col_map[fecha_marca]
                                 
+                                # MODIFICADO: Simplemente mostrar los valores tal como vienen en el JSON
                                 # Hora de ingreso
                                 ws.cell(row=fila_actual, column=col_inicio, 
                                        value=marcacion.get("hora_ingreso", "-"))
                                 
-                                # Tardanza
-                                if marcacion.get("ingreso_tarde", False) and "diferencia_ingreso" in marcacion:
-                                    tar_valor = formato_tiempo(abs(marcacion['diferencia_ingreso']))
-                                else:
-                                    tar_valor = "0"
-                                ws.cell(row=fila_actual, column=col_inicio+1, value=tar_valor)
+                                # Tardanza - Usar el valor como viene
+                                ws.cell(row=fila_actual, column=col_inicio+1, 
+                                       value=str(marcacion.get("diferencia_ingreso", "0")))
 
                                 # Hora de salida
-                                ws.cell(row=fila_actual, column=col_inicio+2, value=marcacion.get("hora_salida", "-"))
+                                ws.cell(row=fila_actual, column=col_inicio+2, 
+                                       value=marcacion.get("hora_salida", "-"))
 
-                                # Salida temprana
-                                if marcacion.get("salida_temprano", False) and "diferencia_salida" in marcacion:
-                                    ext_valor = f"-{formato_tiempo(abs(marcacion['diferencia_salida']))}"
-                                else:
-                                    ext_valor = "0"
-                                ws.cell(row=fila_actual, column=col_inicio+3, value=ext_valor)
+                                # Salida temprana - Usar el valor como viene
+                                ws.cell(row=fila_actual, column=col_inicio+3, 
+                                       value=str(marcacion.get("diferencia_salida", "0")))
                                 
                                 # Aplicar estilos de color
                                 ws.cell(row=fila_actual, column=col_inicio+1).fill = color_rojo

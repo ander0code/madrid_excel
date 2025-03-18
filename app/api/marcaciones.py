@@ -34,7 +34,7 @@ async def generar_reporte_excel(request: ReporteRequest, req: Request):
         print("Procesando datos recibidos...")
         try:
             empleados_data = await process_empleados_data(
-                [empleado.dict() for empleado in request.empleados_data],
+                [empleado.model_dump() for empleado in request.empleados_data],
                 request.fecha_inicio,
                 request.fecha_fin
             )

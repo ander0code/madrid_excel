@@ -31,26 +31,26 @@ def formatear_dias_teletrabajo(dias_remoto: List[str]) -> str:
     else:
         return ", ".join(dias_formateados)
 
-def formato_tiempo(minutos: int) -> str:
-    """
-    Formatea tiempo en minutos a formato legible.
+# def formato_tiempo(minutos: int) -> str:
+#     """
+#     Formatea tiempo en minutos a formato legible.
     
-    Args:
-        minutos: Cantidad de minutos
+#     Args:
+#         minutos: Cantidad de minutos
         
-    Returns:
-        Texto formateado con horas y minutos
-    """
-    if minutos == 0:
-        return "0"
+#     Returns:
+#         Texto formateado con horas y minutos
+#     """
+#     if minutos == 0:
+#         return "0"
         
-    if minutos < 60:
-        return f"{minutos}m"
+#     if minutos < 60:
+#         return f"{minutos}m"
         
-    horas = minutos // 60
-    mins_restantes = minutos % 60
+#     horas = minutos // 60
+#     mins_restantes = minutos % 60
     
-    if mins_restantes == 0:
-        return f"{horas}h"
-    else:
-        return f"{horas}h {mins_restantes}m"
+#     if mins_restantes == 0:
+#         return f"{horas}h"
+#     else:
+#         return f"{horas}h {mins_restantes}m"
