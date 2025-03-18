@@ -258,21 +258,17 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                                                        value=str(diferencia_ingreso))
 
                                 if abs(diferencia_ingreso) <= MARGEN_TOLERANCIA:
-                                    
                                     celda_tardanza.fill = COLOR_VERDE
-                                    celda_tardanza.font = Font(color="000000")
+                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
                                 elif diferencia_ingreso == 0:
-
                                     celda_tardanza.fill = COLOR_VERDE
-                                    celda_tardanza.font = Font(color="000000")
+                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
                                 elif diferencia_ingreso < 0:
-
                                     celda_tardanza.fill = COLOR_AMARILLO
-                                    celda_tardanza.font = Font(color="000000")
+                                    celda_tardanza.font = Font(color="000000", bold=True)
                                 else:
-
                                     celda_tardanza.fill = COLOR_ROJO
-                                    celda_tardanza.font = Font(color="FFFFFF")
+                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
 
                                 ws.cell(row=fila_actual, column=col_inicio+2, 
                                        value=marcacion.get("hora_salida", "-"))
@@ -286,23 +282,18 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                                 celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
                                                        value=str(diferencia_salida))
                                 
-
                                 if abs(diferencia_salida) <= MARGEN_TOLERANCIA:
-
                                     celda_extension.fill = COLOR_VERDE
-                                    celda_extension.font = Font(color="000000")
+                                    celda_extension.font = Font(color="FFFFFF", bold=True)
                                 elif diferencia_salida == 0:
-
                                     celda_extension.fill = COLOR_VERDE
-                                    celda_extension.font = Font(color="000000")
+                                    celda_extension.font = Font(color="FFFFFF", bold=True)
                                 elif diferencia_salida > 0:
-  
                                     celda_extension.fill = COLOR_AMARILLO
-                                    celda_extension.font = Font(color="000000")
+                                    celda_extension.font = Font(color="000000", bold=True)
                                 else:
-
                                     celda_extension.fill = COLOR_ROJO
-                                    celda_extension.font = Font(color="FFFFFF")
+                                    celda_extension.font = Font(color="FFFFFF", bold=True)
                                 
                         except Exception as e:
                             print(f"Error en marcación: {str(e)}")
@@ -312,6 +303,14 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 print(f"Error procesando empleado {idx}: {str(e)}")
             
             fila_actual += 1
+
+        # Aplicar negrita a todas las celdas
+        for row in ws.iter_rows(min_row=1, max_row=fila_actual-1):
+            for cell in row:
+                if cell.value is not None:  # Solo aplicar a celdas con valor
+                    current_font = cell.font
+                    new_color = current_font.color if hasattr(current_font, 'color') and current_font.color else "000000"
+                    cell.font = Font(bold=True, color=new_color)
 
         thin_border = Border(
             left=Side(style='thin', color='000000'),
