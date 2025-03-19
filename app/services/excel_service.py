@@ -14,11 +14,22 @@ from config import settings
 
 
 COLOR_ROJO = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-COLOR_AMARILLO = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 COLOR_VERDE = PatternFill(start_color="538D22", end_color="538D22", fill_type="solid")
 COLOR_ENCABEZADO = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+COLOR_NEGRO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color negro para teletrabajo
+COLOR_GRIS_CLARO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color gris claro para NM
 
 MARGEN_TOLERANCIA = 0
+
+DIAS_SEMANA_MAP = {
+    0: "lun",  # Lunes
+    1: "mar",  # Martes
+    2: "mie",  # Miércoles
+    3: "jue",  # Jueves
+    4: "vier", # Viernes
+    5: "sab",  # Sábado
+    6: "dom"   # Domingo
+}
 
 async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inicio: Optional[str] = None, fecha_fin: Optional[str] = None) -> bytes:
     """
@@ -93,14 +104,24 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
 
         fechas_dias = []
         fecha_col_map = {}
+        dia_semana_map = {}  # Para mapear fecha ISO con el día de la semana
         # Diccionario para rastrear las columnas que son TAR o EXT
         columnas_tardanza_extension = {}
+        
+        # Crear mapeo de fechas a días de la semana
+        todas_fechas = []
         
         if usar_fechas_dinamicas:
             fecha_actual = fecha_inicio_dt
             while fecha_actual <= fecha_fin_dt:
                 dias_semana = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"]
                 dia_nombre = dias_semana[fecha_actual.weekday()]
+                fecha_iso = fecha_actual.strftime("%Y-%m-%d")
+                
+                # Guardar el día de la semana de cada fecha
+                dia_semana = DIAS_SEMANA_MAP[fecha_actual.weekday()]
+                dia_semana_map[fecha_iso] = dia_semana
+                todas_fechas.append((fecha_iso, dia_semana))
                 
                 fecha_mostrar = fecha_actual.strftime("%d %B %Y").upper()
                 mes_espanol = {
@@ -122,6 +143,17 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 ("09 FEBRERO 2025", "DOMINGO"), ("10 FEBRERO 2025", "LUNES"), ("11 FEBRERO 2025", "MARTES"),
                 ("12 FEBRERO 2025", "MIÉRCOLES"), ("13 FEBRERO 2025", "JUEVES"), ("14 FEBRERO 2025", "VIERNES")
             ]
+            
+            # Para fechas estáticas, mapear manualmente
+            dias_mapeo = [
+                ("2025-02-03", "lun"), ("2025-02-04", "mar"), ("2025-02-05", "mie"),
+                ("2025-02-06", "jue"), ("2025-02-07", "vier"), ("2025-02-08", "sab"),
+                ("2025-02-09", "dom"), ("2025-02-10", "lun"), ("2025-02-11", "mar"),
+                ("2025-02-12", "mie"), ("2025-02-13", "jue"), ("2025-02-14", "vier")
+            ]
+            todas_fechas = dias_mapeo
+            for fecha, dia in dias_mapeo:
+                dia_semana_map[fecha] = dia
         
         columnas_fecha = ["ING", "TAR", "SALIDA", "EXT"]
         
@@ -148,10 +180,30 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                     # Registrar columnas TAR y EXT para aplicar negrita posteriormente
                     columnas_tardanza_extension[col+j] = sub
             col += 4
+        
+        # Añadir las columnas de totales al final
+        col_total_tardanza = col
+        col_total_ausencia = col + 1
+        
+        # Añadir encabezados para las columnas de totales
+        ws.merge_cells(start_row=8, start_column=col_total_tardanza, end_row=10, end_column=col_total_tardanza)
+        celda_total_tardanza = ws.cell(row=8, column=col_total_tardanza, value="TOTAL TARDANZA")
+        celda_total_tardanza.alignment = Alignment(horizontal='center', vertical='center')
+        celda_total_tardanza.fill = COLOR_ENCABEZADO
+        celda_total_tardanza.font = Font(color="FFFFFF", bold=True)
+        
+        ws.merge_cells(start_row=8, start_column=col_total_ausencia, end_row=10, end_column=col_total_ausencia)
+        celda_total_ausencia = ws.cell(row=8, column=col_total_ausencia, value="TOTAL AUSENCIA")
+        celda_total_ausencia.alignment = Alignment(horizontal='center', vertical='center')
+        celda_total_ausencia.fill = COLOR_ENCABEZADO
+        celda_total_ausencia.font = Font(color="FFFFFF", bold=True)
+        
+        col += 2  # Actualizar el contador de columnas después de añadir los totales
 
+        # Aplicar estilo a todas las celdas de encabezado
         for row in ws.iter_rows(min_row=8, max_row=10, min_col=1, max_col=col-1):
             for celda in row:
-                if not celda.fill.start_color.index == "FF0000":
+                if not celda.fill.start_color.index == "FF0000":  # Si no es una celda roja (TAR, EXT)
                     celda.fill = COLOR_ENCABEZADO
                     celda.font = Font(color="FFFFFF", bold=True)
 
@@ -160,6 +212,16 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
         
         for idx, empleado in enumerate(empleados_validos, 1):
             try:
+
+                dias_remoto = empleado.get("dias_remoto", [])
+                
+
+                fechas_teletrabajo = set()
+                for fecha_iso, dia_semana in todas_fechas:
+                    if dia_semana in dias_remoto:
+                        fechas_teletrabajo.add(fecha_iso)
+
+                
                 ws.cell(row=fila_actual, column=1, value=idx)
                 ws.cell(row=fila_actual, column=2, value=empleado.get("emp_code", ""))
                 
@@ -225,96 +287,199 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 else:
                     ws.cell(row=fila_actual, column=13, value="-")
 
-                dias_remoto = empleado.get("dias_remoto", [])
+                # Agregar los días de teletrabajo formateados
                 ws.cell(row=fila_actual, column=14, value=formatear_dias_teletrabajo(dias_remoto))
-
+                
+                # Inicializar un diccionario para rastrear las marcaciones por fecha
+                marcaciones_por_fecha = {}
+                
+                # Almacenar todas las marcaciones por fecha
                 if "marcaciones" in empleado and isinstance(empleado["marcaciones"], list):
                     for marcacion in empleado["marcaciones"]:
                         try:
                             if not isinstance(marcacion, dict) or "fecha" not in marcacion:
                                 continue
- 
+                                
                             fecha_marca = None
                             try:
                                 fecha_marca = datetime.strptime(marcacion["fecha"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%d")
                             except ValueError:
-
                                 try:
                                     fecha_marca = datetime.strptime(marcacion["fecha"], "%Y-%m-%d").strftime("%Y-%m-%d")
                                 except ValueError:
                                     print(f"Error al parsear fecha: {marcacion['fecha']}")
                                     continue
+                                    
+                            # Almacenar esta marcación
+                            marcaciones_por_fecha[fecha_marca] = marcacion
                             
-                            if fecha_marca in fecha_col_map:
-                                col_inicio = fecha_col_map[fecha_marca]
-                                
-                                ws.cell(row=fila_actual, column=col_inicio, 
-                                       value=marcacion.get("hora_ingreso", "-"))
-                                
-
-                                diferencia_ingreso = marcacion.get("diferencia_ingreso", 0)
-                                try:
-                                    diferencia_ingreso = int(diferencia_ingreso)
-                                except (ValueError, TypeError):
-                                    diferencia_ingreso = 0
-                                    
-                                celda_tardanza = ws.cell(row=fila_actual, column=col_inicio+1, 
-                                                       value=str(diferencia_ingreso))
-
-                                # Aplicar negrita a la celda TAR (tardanza)
-                                if abs(diferencia_ingreso) <= MARGEN_TOLERANCIA:
-                                    celda_tardanza.fill = COLOR_VERDE
-                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
-                                elif diferencia_ingreso == 0:
-                                    celda_tardanza.fill = COLOR_VERDE
-                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
-                                elif diferencia_ingreso < 0:
-                                    celda_tardanza.fill = COLOR_AMARILLO
-                                    celda_tardanza.font = Font(color="000000", bold=True)
-                                else:
-                                    celda_tardanza.fill = COLOR_ROJO
-                                    celda_tardanza.font = Font(color="FFFFFF", bold=True)
-
-                                ws.cell(row=fila_actual, column=col_inicio+2, 
-                                       value=marcacion.get("hora_salida", "-"))
-
-                                diferencia_salida = marcacion.get("diferencia_salida", 0)
-                                try:
-                                    diferencia_salida = int(diferencia_salida)
-                                except (ValueError, TypeError):
-                                    diferencia_salida = 0
-                                    
-                                celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
-                                                       value=str(diferencia_salida))
-                                
-                                # Aplicar negrita a la celda EXT (extensión)
-                                if abs(diferencia_salida) <= MARGEN_TOLERANCIA:
-                                    celda_extension.fill = COLOR_VERDE
-                                    celda_extension.font = Font(color="FFFFFF", bold=True)
-                                elif diferencia_salida == 0:
-                                    celda_extension.fill = COLOR_VERDE
-                                    celda_extension.font = Font(color="FFFFFF", bold=True)
-                                elif diferencia_salida > 0:
-                                    celda_extension.fill = COLOR_AMARILLO
-                                    celda_extension.font = Font(color="000000", bold=True)
-                                else:
-                                    celda_extension.fill = COLOR_ROJO
-                                    celda_extension.font = Font(color="FFFFFF", bold=True)
-                                
                         except Exception as e:
-                            print(f"Error en marcación: {str(e)}")
+                            print(f"Error procesando marcación: {str(e)}")
                             continue
+                
+                # Ahora, para cada fecha en el rango, procesarla adecuadamente
+                for fecha_iso in fecha_col_map.keys():
+                    col_inicio = fecha_col_map[fecha_iso]
+                    
+                    # Verificar si esta fecha debe ser teletrabajo
+                    es_dia_teletrabajo = fecha_iso in fechas_teletrabajo
+                    
+                    if es_dia_teletrabajo:
+                        # Si es día de teletrabajo, pintar todas las celdas de negro
+                        for j in range(4):  # 4 columnas: ING, TAR, SALIDA, EXT
+                            celda = ws.cell(row=fila_actual, column=col_inicio+j, value="")
+                            celda.fill = COLOR_NEGRO
+                            celda.font = Font(color="FFFFFF")
+                            celda.alignment = Alignment(horizontal='center', vertical='center')
+
+                    else:
+                        # Si no es día de teletrabajo, verificar si tenemos datos para esta fecha
+                        if fecha_iso in marcaciones_por_fecha:
+                            marcacion = marcaciones_por_fecha[fecha_iso]
+                            
+                            # Celda de entrada - centrada
+                            hora_ingreso = marcacion.get("hora_ingreso")
+                            if hora_ingreso is None:
+                                # Si hora_ingreso es null, escribir "NM" con fondo gris claro
+                                celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value="NM")
+                                celda_ingreso.fill = COLOR_GRIS_CLARO
+                                celda_ingreso.font = Font(bold=True)
+                            else:
+                                celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value=hora_ingreso)
+                            
+                            celda_ingreso.alignment = Alignment(horizontal='center', vertical='center')
+
+                            diferencia_ingreso = marcacion.get("diferencia_ingreso", 0)
+                            try:
+                                diferencia_ingreso = int(diferencia_ingreso)
+                            except (ValueError, TypeError):
+                                diferencia_ingreso = 0
+                                
+                            # Celda de tardanza - centrada
+                            celda_tardanza = ws.cell(row=fila_actual, column=col_inicio+1, 
+                                                  value=str(diferencia_ingreso))
+                            celda_tardanza.alignment = Alignment(horizontal='center', vertical='center')
+
+                            # Aplicar negrita y color a la celda TAR (tardanza)
+                            if diferencia_ingreso > 0:
+                                celda_tardanza.fill = COLOR_ROJO
+                                celda_tardanza.font = Font(color="FFFFFF", bold=True)
+                            else:
+                                celda_tardanza.fill = COLOR_VERDE
+                                celda_tardanza.font = Font(color="FFFFFF", bold=True)
+
+                            # Celda de salida - centrada
+                            hora_salida = marcacion.get("hora_salida")
+                            if hora_salida is None:
+                                # Si hora_salida es null, escribir "NM" con fondo gris claro
+                                celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value="NM")
+                                celda_salida.fill = COLOR_GRIS_CLARO
+                                celda_salida.font = Font(bold=True)
+                            else:
+                                celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value=hora_salida)
+                            
+                            celda_salida.alignment = Alignment(horizontal='center', vertical='center')
+
+                            diferencia_salida = marcacion.get("diferencia_salida", 0)
+                            try:
+                                diferencia_salida = int(diferencia_salida)
+                            except (ValueError, TypeError):
+                                diferencia_salida = 0
+                                
+                            # Celda de extensión - centrada
+                            celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
+                                                   value=str(diferencia_salida))
+                            celda_extension.alignment = Alignment(horizontal='center', vertical='center')
+                            
+                            # Aplicar negrita y color a la celda EXT (extensión)
+                            if diferencia_salida < 0:
+                                celda_extension.fill = COLOR_ROJO
+                                celda_extension.font = Font(color="FFFFFF", bold=True)
+                            else:
+                                celda_extension.fill = COLOR_VERDE
+                                celda_extension.font = Font(color="FFFFFF", bold=True)
+
+                # Calcular totales a partir de las marcaciones si es necesario
+                total_tardanza_calculado = 0
+                total_ausencia_calculada = 0
+
+                if "marcaciones" in empleado and isinstance(empleado["marcaciones"], list):
+                    for marcacion in empleado["marcaciones"]:
+                        try:
+                            diferencia_ingreso = marcacion.get("diferencia_ingreso", 0)
+                            if isinstance(diferencia_ingreso, (int, float)) and diferencia_ingreso > 0:
+                                total_tardanza_calculado += diferencia_ingreso
+                                
+                            diferencia_salida = marcacion.get("diferencia_salida", 0)
+                            if isinstance(diferencia_salida, (int, float)) and diferencia_salida < 0:
+                                total_ausencia_calculada += diferencia_salida
+                        except Exception as e:
+                            print(f"Error al calcular totales de marcación: {str(e)}")
+
+                # Extraer los valores de totales del JSON
+                total_tardanza = empleado.get("total_minutos_tardanzas")
+                total_ausencia = empleado.get("total_minutos_salidas_temprano")
+
+                # Si los valores originales son None o 0, usar los calculados
+                if total_tardanza is None or total_tardanza == 0:
+                    total_tardanza = total_tardanza_calculado
+
+        
+                if total_ausencia is None or total_ausencia == 0:
+                    total_ausencia = total_ausencia_calculada
+
+                
+                # Verificar que sean números y convertirlos si es necesario
+                if isinstance(total_tardanza, str):
+                    try:
+                        total_tardanza = int(total_tardanza)
+                    except (ValueError, TypeError):
+                        total_tardanza = total_tardanza_calculado
+                elif not isinstance(total_tardanza, (int, float)):
+                    total_tardanza = total_tardanza_calculado
+                
+                if isinstance(total_ausencia, str):
+                    try:
+                        total_ausencia = int(total_ausencia)
+                    except (ValueError, TypeError):
+                        total_ausencia = total_ausencia_calculada
+                elif not isinstance(total_ausencia, (int, float)):
+                    total_ausencia = total_ausencia_calculada
+                
+    
+                # Celda Total Tardanza
+                celda_total_tard = ws.cell(row=fila_actual, column=col_total_tardanza, value=total_tardanza)
+                celda_total_tard.alignment = Alignment(horizontal='center', vertical='center')
+                if total_tardanza > 0:
+                    celda_total_tard.fill = COLOR_ROJO
+                    celda_total_tard.font = Font(color="FFFFFF", bold=True)
+                else:
+                    celda_total_tard.fill = COLOR_VERDE
+                    celda_total_tard.font = Font(color="FFFFFF", bold=True)
+                
+                # Celda Total Ausencia
+                celda_total_aus = ws.cell(row=fila_actual, column=col_total_ausencia, value=total_ausencia)
+                celda_total_aus.alignment = Alignment(horizontal='center', vertical='center')
+                if total_ausencia < 0:
+                    celda_total_aus.fill = COLOR_ROJO
+                    celda_total_aus.font = Font(color="FFFFFF", bold=True)
+                else:
+                    celda_total_aus.fill = COLOR_VERDE
+                    celda_total_aus.font = Font(color="FFFFFF", bold=True)
             
             except Exception as e:
                 print(f"Error procesando empleado {idx}: {str(e)}")
+                import traceback
+                traceback.print_exc()
             
             fila_actual += 1
 
-        # Eliminar el código que aplicaba negrita a todas las celdas
-        # y solo aplicar estilos a los textos de encabezados importantes
-        
-        # Solo dejamos los encabezados y títulos en negrita, que ya tienen su estilo
-        # por defecto aplicado en el código anterior
+        # Centrar todas las celdas de las columnas generadas por rango de fechas
+        # (a partir de la columna 15)
+        for row in ws.iter_rows(min_row=11, max_row=fila_actual-1, min_col=15, max_col=col-1):
+            for cell in row:
+                if not cell.fill.start_color.index == "000000":  # No modificar la alineación si es celda negra de teletrabajo
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
 
         thin_border = Border(
             left=Side(style='thin', color='000000'),
@@ -335,8 +500,13 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
         for letra, ancho in anchos_personalizados.items():
             ws.column_dimensions[letra].width = ancho
             
-        for idx in range(15, col):
+        # Configurar el ancho de las columnas de fechas y totales
+        for idx in range(15, col-2):  # Columnas de fechas
             ws.column_dimensions[get_column_letter(idx)].width = 10
+            
+        # Configurar el ancho de las columnas de totales
+        ws.column_dimensions[get_column_letter(col_total_tardanza)].width = 15
+        ws.column_dimensions[get_column_letter(col_total_ausencia)].width = 15
 
         print("Generando bytes del Excel...")
         output = io.BytesIO()
