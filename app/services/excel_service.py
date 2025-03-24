@@ -16,8 +16,9 @@ from config import settings
 COLOR_ROJO = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 COLOR_VERDE = PatternFill(start_color="538D22", end_color="538D22", fill_type="solid")
 COLOR_ENCABEZADO = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-COLOR_NEGRO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color negro para teletrabajo
-COLOR_GRIS_CLARO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color gris claro para NM
+COLOR_NEGRO = PatternFill(start_color="000000", end_color="000000", fill_type="solid")  # Color negro para teletrabajo
+COLOR_GRIS_CLARO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color gris para NM
+COLOR_TELETRABAJO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Gris claro para teletrabajo
 
 MARGEN_TOLERANCIA = 0
 
@@ -212,15 +213,12 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
         
         for idx, empleado in enumerate(empleados_validos, 1):
             try:
-
                 dias_remoto = empleado.get("dias_remoto", [])
                 
-
                 fechas_teletrabajo = set()
                 for fecha_iso, dia_semana in todas_fechas:
                     if dia_semana in dias_remoto:
                         fechas_teletrabajo.add(fecha_iso)
-
                 
                 ws.cell(row=fila_actual, column=1, value=idx)
                 ws.cell(row=fila_actual, column=2, value=empleado.get("emp_code", ""))
@@ -324,77 +322,91 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                     # Verificar si esta fecha debe ser teletrabajo
                     es_dia_teletrabajo = fecha_iso in fechas_teletrabajo
                     
+                    # Verificar si tenemos marcaciones para esta fecha
+                    tiene_marcaciones = fecha_iso in marcaciones_por_fecha
+                    
+                    # Si es día de teletrabajo, aplicar fondo gris claro a las celdas
                     if es_dia_teletrabajo:
-                        # Si es día de teletrabajo, pintar todas las celdas de negro
+                        # Aplicar fondo de teletrabajo a todas las celdas
                         for j in range(4):  # 4 columnas: ING, TAR, SALIDA, EXT
-                            celda = ws.cell(row=fila_actual, column=col_inicio+j, value="")
-                            celda.fill = COLOR_NEGRO
-                            celda.font = Font(color="FFFFFF")
+                            celda = ws.cell(row=fila_actual, column=col_inicio+j)
+                            celda.fill = COLOR_TELETRABAJO
                             celda.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    # Si tenemos marcaciones para esta fecha, mostrarlas
+                    if tiene_marcaciones:
+                        marcacion = marcaciones_por_fecha[fecha_iso]
+                        
+                        # Celda de entrada - centrada
+                        hora_ingreso = marcacion.get("hora_ingreso")
+                        if hora_ingreso is None:
+                            # Si hora_ingreso es null, escribir "NM" con fondo gris
+                            celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value="NM")
+                            celda_ingreso.fill = COLOR_GRIS_CLARO
+                            celda_ingreso.font = Font(bold=True)
+                        else:
+                            celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value=hora_ingreso)
+                            # Si es día de teletrabajo, mantener el fondo de teletrabajo
+                            if es_dia_teletrabajo:
+                                celda_ingreso.fill = COLOR_TELETRABAJO
+                        
+                        celda_ingreso.alignment = Alignment(horizontal='center', vertical='center')
 
-                    else:
-                        # Si no es día de teletrabajo, verificar si tenemos datos para esta fecha
-                        if fecha_iso in marcaciones_por_fecha:
-                            marcacion = marcaciones_por_fecha[fecha_iso]
+                        diferencia_ingreso = marcacion.get("diferencia_ingreso", 0)
+                        try:
+                            diferencia_ingreso = int(diferencia_ingreso)
+                        except (ValueError, TypeError):
+                            diferencia_ingreso = 0
                             
-                            # Celda de entrada - centrada
-                            hora_ingreso = marcacion.get("hora_ingreso")
-                            if hora_ingreso is None:
-                                # Si hora_ingreso es null, escribir "NM" con fondo gris claro
-                                celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value="NM")
-                                celda_ingreso.fill = COLOR_GRIS_CLARO
-                                celda_ingreso.font = Font(bold=True)
-                            else:
-                                celda_ingreso = ws.cell(row=fila_actual, column=col_inicio, value=hora_ingreso)
-                            
-                            celda_ingreso.alignment = Alignment(horizontal='center', vertical='center')
+                        # Celda de tardanza - centrada
+                        celda_tardanza = ws.cell(row=fila_actual, column=col_inicio+1, 
+                                              value=str(diferencia_ingreso))
+                        celda_tardanza.alignment = Alignment(horizontal='center', vertical='center')
 
-                            diferencia_ingreso = marcacion.get("diferencia_ingreso", 0)
-                            try:
-                                diferencia_ingreso = int(diferencia_ingreso)
-                            except (ValueError, TypeError):
-                                diferencia_ingreso = 0
-                                
-                            # Celda de tardanza - centrada
-                            celda_tardanza = ws.cell(row=fila_actual, column=col_inicio+1, 
-                                                  value=str(diferencia_ingreso))
-                            celda_tardanza.alignment = Alignment(horizontal='center', vertical='center')
-
-                            # Aplicar negrita y color a la celda TAR (tardanza)
-                            if diferencia_ingreso > 0:
-                                celda_tardanza.fill = COLOR_ROJO
-                                celda_tardanza.font = Font(color="FFFFFF", bold=True)
+                        # Aplicar color según tardanza, pero respetando si es día de teletrabajo
+                        if diferencia_ingreso > 0:
+                            celda_tardanza.fill = COLOR_ROJO
+                            celda_tardanza.font = Font(color="FFFFFF", bold=True)
+                        else:
+                            if es_dia_teletrabajo:
+                                celda_tardanza.fill = COLOR_TELETRABAJO
                             else:
                                 celda_tardanza.fill = COLOR_VERDE
                                 celda_tardanza.font = Font(color="FFFFFF", bold=True)
 
-                            # Celda de salida - centrada
-                            hora_salida = marcacion.get("hora_salida")
-                            if hora_salida is None:
-                                # Si hora_salida es null, escribir "NM" con fondo gris claro
-                                celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value="NM")
-                                celda_salida.fill = COLOR_GRIS_CLARO
-                                celda_salida.font = Font(bold=True)
-                            else:
-                                celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value=hora_salida)
-                            
-                            celda_salida.alignment = Alignment(horizontal='center', vertical='center')
+                        # Celda de salida - centrada
+                        hora_salida = marcacion.get("hora_salida")
+                        if hora_salida is None:
+                            # Si hora_salida es null, escribir "NM" con fondo gris
+                            celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value="NM")
+                            celda_salida.fill = COLOR_GRIS_CLARO
+                            celda_salida.font = Font(bold=True)
+                        else:
+                            celda_salida = ws.cell(row=fila_actual, column=col_inicio+2, value=hora_salida)
+                            # Si es día de teletrabajo, mantener el fondo de teletrabajo
+                            if es_dia_teletrabajo:
+                                celda_salida.fill = COLOR_TELETRABAJO
+                        
+                        celda_salida.alignment = Alignment(horizontal='center', vertical='center')
 
-                            diferencia_salida = marcacion.get("diferencia_salida", 0)
-                            try:
-                                diferencia_salida = int(diferencia_salida)
-                            except (ValueError, TypeError):
-                                diferencia_salida = 0
-                                
-                            # Celda de extensión - centrada
-                            celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
-                                                   value=str(diferencia_salida))
-                            celda_extension.alignment = Alignment(horizontal='center', vertical='center')
+                        diferencia_salida = marcacion.get("diferencia_salida", 0)
+                        try:
+                            diferencia_salida = int(diferencia_salida)
+                        except (ValueError, TypeError):
+                            diferencia_salida = 0
                             
-                            # Aplicar negrita y color a la celda EXT (extensión)
-                            if diferencia_salida < 0:
-                                celda_extension.fill = COLOR_ROJO
-                                celda_extension.font = Font(color="FFFFFF", bold=True)
+                        # Celda de extensión - centrada
+                        celda_extension = ws.cell(row=fila_actual, column=col_inicio+3, 
+                                               value=str(diferencia_salida))
+                        celda_extension.alignment = Alignment(horizontal='center', vertical='center')
+                        
+                        # Aplicar color según extensión, pero respetando si es día de teletrabajo
+                        if diferencia_salida < 0:
+                            celda_extension.fill = COLOR_ROJO
+                            celda_extension.font = Font(color="FFFFFF", bold=True)
+                        else:
+                            if es_dia_teletrabajo:
+                                celda_extension.fill = COLOR_TELETRABAJO
                             else:
                                 celda_extension.fill = COLOR_VERDE
                                 celda_extension.font = Font(color="FFFFFF", bold=True)
@@ -423,11 +435,9 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 # Si los valores originales son None o 0, usar los calculados
                 if total_tardanza is None or total_tardanza == 0:
                     total_tardanza = total_tardanza_calculado
-
-        
+                
                 if total_ausencia is None or total_ausencia == 0:
                     total_ausencia = total_ausencia_calculada
-
                 
                 # Verificar que sean números y convertirlos si es necesario
                 if isinstance(total_tardanza, str):
@@ -446,7 +456,6 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 elif not isinstance(total_ausencia, (int, float)):
                     total_ausencia = total_ausencia_calculada
                 
-    
                 # Celda Total Tardanza
                 celda_total_tard = ws.cell(row=fila_actual, column=col_total_tardanza, value=total_tardanza)
                 celda_total_tard.alignment = Alignment(horizontal='center', vertical='center')
@@ -478,7 +487,7 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
         # (a partir de la columna 15)
         for row in ws.iter_rows(min_row=11, max_row=fila_actual-1, min_col=15, max_col=col-1):
             for cell in row:
-                if not cell.fill.start_color.index == "000000":  # No modificar la alineación si es celda negra de teletrabajo
+                if not cell.alignment.horizontal:  # Si no tiene alineación definida
                     cell.alignment = Alignment(horizontal='center', vertical='center')
 
         thin_border = Border(
