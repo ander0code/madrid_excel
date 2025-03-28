@@ -18,9 +18,10 @@ COLOR_VERDE = PatternFill(start_color="538D22", end_color="538D22", fill_type="s
 COLOR_ENCABEZADO = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
 COLOR_NEGRO = PatternFill(start_color="000000", end_color="000000", fill_type="solid")  # Color negro para teletrabajo
 COLOR_GRIS_CLARO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Color gris para NM
-COLOR_TELETRABAJO = PatternFill(start_color="A9A9A9", end_color="A9A9A9", fill_type="solid")  # Gris claro para teletrabajo
+COLOR_TELETRABAJO = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")  # Gris claro para teletrabajo
+COLOR_AMARILLO = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # Amarillo para tolerancia
 
-MARGEN_TOLERANCIA = 0
+MARGEN_TOLERANCIA = 5  
 
 DIAS_SEMANA_MAP = {
     0: "lun",  # Lunes
@@ -182,24 +183,46 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                     columnas_tardanza_extension[col+j] = sub
             col += 4
         
-        # Añadir las columnas de totales al final
-        col_total_tardanza = col
-        col_total_ausencia = col + 1
+        # Añadir nuevas columnas de cantidades
+        col_cant_tardanzas = col
+        col_cant_tolerancias = col + 1
+        col_cant_faltas = col + 2
+        col_total_tardanza = col + 3
+        col_total_ausencia = col + 4
         
-        # Añadir encabezados para las columnas de totales
+        # Añadir encabezados para las columnas de cantidades
+        ws.merge_cells(start_row=8, start_column=col_cant_tardanzas, end_row=10, end_column=col_cant_tardanzas)
+        celda_cant_tard = ws.cell(row=8, column=col_cant_tardanzas, value="CANT. TARDANZAS")
+        celda_cant_tard.alignment = Alignment(horizontal='center', vertical='center')
+        celda_cant_tard.fill = COLOR_ENCABEZADO
+        celda_cant_tard.font = Font(color="FFFFFF", bold=True)
+        
+        ws.merge_cells(start_row=8, start_column=col_cant_tolerancias, end_row=10, end_column=col_cant_tolerancias)
+        celda_cant_toler = ws.cell(row=8, column=col_cant_tolerancias, value="CANT. TOLERANCIAS")
+        celda_cant_toler.alignment = Alignment(horizontal='center', vertical='center')
+        celda_cant_toler.fill = COLOR_ENCABEZADO
+        celda_cant_toler.font = Font(color="FFFFFF", bold=True)
+        
+        ws.merge_cells(start_row=8, start_column=col_cant_faltas, end_row=10, end_column=col_cant_faltas)
+        celda_cant_faltas = ws.cell(row=8, column=col_cant_faltas, value="CANT. FALTAS")
+        celda_cant_faltas.alignment = Alignment(horizontal='center', vertical='center')
+        celda_cant_faltas.fill = COLOR_ENCABEZADO
+        celda_cant_faltas.font = Font(color="FFFFFF", bold=True)
+        
+        # Añadir encabezados para las columnas de totales con nombres actualizados
         ws.merge_cells(start_row=8, start_column=col_total_tardanza, end_row=10, end_column=col_total_tardanza)
-        celda_total_tardanza = ws.cell(row=8, column=col_total_tardanza, value="TOTAL TARDANZA")
+        celda_total_tardanza = ws.cell(row=8, column=col_total_tardanza, value="TOTAL DE MINUTOS DE TARDANZA")
         celda_total_tardanza.alignment = Alignment(horizontal='center', vertical='center')
         celda_total_tardanza.fill = COLOR_ENCABEZADO
         celda_total_tardanza.font = Font(color="FFFFFF", bold=True)
         
         ws.merge_cells(start_row=8, start_column=col_total_ausencia, end_row=10, end_column=col_total_ausencia)
-        celda_total_ausencia = ws.cell(row=8, column=col_total_ausencia, value="TOTAL AUSENCIA")
+        celda_total_ausencia = ws.cell(row=8, column=col_total_ausencia, value="TOTAL DE MINUTOS DE AUSENCIA")
         celda_total_ausencia.alignment = Alignment(horizontal='center', vertical='center')
         celda_total_ausencia.fill = COLOR_ENCABEZADO
         celda_total_ausencia.font = Font(color="FFFFFF", bold=True)
         
-        col += 2  # Actualizar el contador de columnas después de añadir los totales
+        col += 5  # Actualizar el contador de columnas después de añadir las nuevas columnas
 
         # Aplicar estilo a todas las celdas de encabezado
         for row in ws.iter_rows(min_row=8, max_row=10, min_col=1, max_col=col-1):
@@ -315,6 +338,10 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                             print(f"Error procesando marcación: {str(e)}")
                             continue
                 
+                # Contadores para tolerancias y tardanzas
+                contador_tardanzas = 0
+                contador_tolerancias = 0
+                
                 # Ahora, para cada fecha en el rango, procesarla adecuadamente
                 for fecha_iso in fecha_col_map.keys():
                     col_inicio = fecha_col_map[fecha_iso]
@@ -363,10 +390,15 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                                               value=str(diferencia_ingreso))
                         celda_tardanza.alignment = Alignment(horizontal='center', vertical='center')
 
-                        # Aplicar color según tardanza, pero respetando si es día de teletrabajo
-                        if diferencia_ingreso > 0:
+                        # Nueva lógica de color con tolerancia
+                        if diferencia_ingreso > MARGEN_TOLERANCIA:
                             celda_tardanza.fill = COLOR_ROJO
                             celda_tardanza.font = Font(color="FFFFFF", bold=True)
+                            contador_tardanzas += 1
+                        elif diferencia_ingreso > 0:
+                            celda_tardanza.fill = COLOR_AMARILLO
+                            celda_tardanza.font = Font(bold=True)
+                            contador_tolerancias += 1
                         else:
                             if es_dia_teletrabajo:
                                 celda_tardanza.fill = COLOR_TELETRABAJO
@@ -428,9 +460,12 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                         except Exception as e:
                             print(f"Error al calcular totales de marcación: {str(e)}")
 
-                # Extraer los valores de totales del JSON
+                # Extraer los valores de totales y cantidades del JSON
                 total_tardanza = empleado.get("total_minutos_tardanzas")
                 total_ausencia = empleado.get("total_minutos_salidas_temprano")
+                cant_tardanzas = empleado.get("cantidad_tardanzas", contador_tardanzas)
+                cant_tolerancias = empleado.get("cantidad_tolerancias", contador_tolerancias)
+                cant_faltas = empleado.get("cantidad_faltas", 0)
 
                 # Si los valores originales son None o 0, usar los calculados
                 if total_tardanza is None or total_tardanza == 0:
@@ -455,6 +490,16 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                         total_ausencia = total_ausencia_calculada
                 elif not isinstance(total_ausencia, (int, float)):
                     total_ausencia = total_ausencia_calculada
+                
+                # Añadir las nuevas columnas de cantidades
+                celda_cant_tard = ws.cell(row=fila_actual, column=col_cant_tardanzas, value=cant_tardanzas)
+                celda_cant_tard.alignment = Alignment(horizontal='center', vertical='center')
+                
+                celda_cant_toler = ws.cell(row=fila_actual, column=col_cant_tolerancias, value=cant_tolerancias)
+                celda_cant_toler.alignment = Alignment(horizontal='center', vertical='center')
+                
+                celda_cant_faltas = ws.cell(row=fila_actual, column=col_cant_faltas, value=cant_faltas)
+                celda_cant_faltas.alignment = Alignment(horizontal='center', vertical='center')
                 
                 # Celda Total Tardanza
                 celda_total_tard = ws.cell(row=fila_actual, column=col_total_tardanza, value=total_tardanza)
@@ -509,11 +554,14 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
         for letra, ancho in anchos_personalizados.items():
             ws.column_dimensions[letra].width = ancho
             
-        # Configurar el ancho de las columnas de fechas y totales
-        for idx in range(15, col-2):  # Columnas de fechas
+        # Configurar el ancho de las columnas de fechas
+        for idx in range(15, col_cant_tardanzas):  # Columnas de fechas
             ws.column_dimensions[get_column_letter(idx)].width = 10
             
-        # Configurar el ancho de las columnas de totales
+        # Configurar el ancho de las nuevas columnas
+        ws.column_dimensions[get_column_letter(col_cant_tardanzas)].width = 15
+        ws.column_dimensions[get_column_letter(col_cant_tolerancias)].width = 15
+        ws.column_dimensions[get_column_letter(col_cant_faltas)].width = 15
         ws.column_dimensions[get_column_letter(col_total_tardanza)].width = 15
         ws.column_dimensions[get_column_letter(col_total_ausencia)].width = 15
 
