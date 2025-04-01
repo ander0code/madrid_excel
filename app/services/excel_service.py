@@ -466,7 +466,32 @@ async def generate_excel_report(empleados_data: List[Dict[str, Any]], fecha_inic
                 cant_tardanzas = empleado.get("cantidad_tardanzas", contador_tardanzas)
                 cant_tolerancias = empleado.get("cantidad_tolerancias", contador_tolerancias)
                 cant_faltas = empleado.get("cantidad_faltas", 0)
+                
+                print(f"Empleado: {nombre_completo}, cantidad_faltas: {cant_faltas}")
 
+                # Asegúrate de que cant_faltas sea un número
+                if isinstance(cant_faltas, str):
+                    try:
+                        cant_faltas = int(cant_faltas)
+                    except (ValueError, TypeError):
+                        cant_faltas = 0
+                elif not isinstance(cant_faltas, (int, float)):
+                    cant_faltas = 0
+
+                # Forzar un valor mínimo si es un empleado activo y hay días sin marcar
+                if estado == "Activo" and cant_faltas == 0:
+                    # Calcular días laborables en el rango
+                    dias_laborables_rango = 0
+                    dias_laborables = empleado.get("dias_labores", "lun-vier").split("-")
+                    
+                    for fecha_iso, dia_semana in todas_fechas:
+                        if dia_semana in dias_laborables and fecha_iso not in marcaciones_por_fecha and fecha_iso not in fechas_teletrabajo:
+                            dias_laborables_rango += 1
+                    
+                    # Si hay días laborables sin marcar, actualizar cant_faltas
+                    if dias_laborables_rango > 0:
+                        print(f"Días sin marcar para {nombre_completo}: {dias_laborables_rango}")
+                        cant_faltas = max(cant_faltas, dias_laborables_rango)
                 # Si los valores originales son None o 0, usar los calculados
                 if total_tardanza is None or total_tardanza == 0:
                     total_tardanza = total_tardanza_calculado
