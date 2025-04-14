@@ -24,7 +24,7 @@ async def generar_reporte_excel(request: ReporteRequest, req: Request):
         # Log para debugging
         content_length = req.headers.get("content-length", "desconocido")
         print(
-            f"Recibiendo solicitud con Content-Length: {request} bytes")
+            f"Recibiendo solicitud con Content-Length: {content_length} bytes")
 
         # Mostrar muestra de los datos recibidos
         if request.empleados_data:

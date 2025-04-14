@@ -35,6 +35,7 @@ class EmpleadoMarcaciones(BaseModel):
     cantidad_tardanzas: Optional[int] = 0
     cantidad_tolerancias: Optional[int] = 0
     cantidad_faltas: Optional[int] = 0
+    gerencia: Optional[str] = None
 
 
 class ReporteRequest(BaseModel):
