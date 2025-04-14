@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Union
 from datetime import datetime
 
+
 class Marcacion(BaseModel):
     """Modelo para una marcación de asistencia."""
     fecha: Union[str, datetime] = Field(...)
@@ -13,6 +14,7 @@ class Marcacion(BaseModel):
     marco_salida: Optional[bool] = None
     ingreso_tarde: Optional[bool] = None
     salida_temprano: Optional[bool] = None
+
 
 class EmpleadoMarcaciones(BaseModel):
     """Modelo para un empleado con sus marcaciones."""
@@ -30,6 +32,10 @@ class EmpleadoMarcaciones(BaseModel):
     dias_labores: Optional[str] = None
     dias_descanso: Optional[str] = None
     dias_remoto: List[str] = []
+    cantidad_tardanzas: Optional[int] = 0
+    cantidad_tolerancias: Optional[int] = 0
+    cantidad_faltas: Optional[int] = 0
+
 
 class ReporteRequest(BaseModel):
     """Modelo para la solicitud de generación de reporte."""
@@ -37,9 +43,11 @@ class ReporteRequest(BaseModel):
     fecha_inicio: Optional[str] = None
     fecha_fin: Optional[str] = None
 
+
 class ResponseEmpleados(BaseModel):
     """Modelo para la respuesta con lista de empleados."""
     empleados: List[EmpleadoMarcaciones]
+
 
 class ErrorResponse(BaseModel):
     """Modelo para respuestas de error."""
